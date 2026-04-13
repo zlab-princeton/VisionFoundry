@@ -1,0 +1,26 @@
+{
+  "providers": {
+    "text": {
+      "type": "openai",
+      "model": "gpt-5.2",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1"
+    },
+    "embed": {
+      "type": "openai",
+      "model": "text-embedding-3-small",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1"
+    },
+    "image": {
+      "type": "gemini",
+      "model": "gemini-2.5-flash-image",
+      "api_key_env": "GEMINI_API_KEY"
+    },
+    "check": {
+      "type": "gemini",
+      "model": "gemini-3.0-pro",
+      "api_key_env": "GEMINI_API_KEY"
+    }
+  }
+}

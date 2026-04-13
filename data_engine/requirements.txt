@@ -1,0 +1,6 @@
+openai
+google-genai
+pillow
+requests
+tqdm
+numpy
