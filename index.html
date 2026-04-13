@@ -1,0 +1,812 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VisionFoundry: Teaching VLMs Visual Perception with Synthetic Images</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,300;400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-0: #0b0f1a;
+      --bg-1: #0f1d2f;
+      --glass: rgba(255, 255, 255, 0.15);
+      --glass-dark: rgba(0, 0, 0, 0.5);
+      --stroke: rgba(255, 255, 255, 0.25);
+      --stroke-dark: rgba(255, 255, 255, 0.15);
+      --text: #1a1a2e;
+      --text-dark: rgba(255, 255, 255, 0.9);
+      --muted: #1a1a2e;
+      --muted-dark: rgba(255, 255, 255, 0.55);
+      --accent: #0063be;
+      --accent-2: #7c3aed;
+      --accent-3: #059669;
+      --shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+      --shadow-dark: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+
+    :root.dark {
+      --glass: rgba(0, 0, 0, 0.85);
+      --stroke: rgba(255, 255, 255, 0.08);
+      --text: rgba(255, 255, 255, 0.9);
+      --muted: rgba(255, 255, 255, 0.45);
+      --shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+    }
+    :root.dark #glcanvas { display: none; }
+    :root.dark body { background: #000000; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    #glcanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: -1;
+      display: block;
+    }
+    .container {
+      position: relative; z-index: 2;
+      width: min(1100px, 92vw); margin: 0 auto; padding: 40px 0 80px;
+    }
+    .badge-row { display: inline-flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 24px; }
+    .badge {
+      font-size: 14px; letter-spacing: 0.01em;
+      padding: 8px 14px; border-radius: 999px;
+      background: var(--glass);
+      border: 1px solid var(--stroke); color: var(--text); text-decoration: none;
+      backdrop-filter: blur(10px); box-shadow: var(--shadow);
+    }
+    .hero h1 { font-size: clamp(28px, 3.5vw, 44px); line-height: 1.1; margin: 0 0 14px; }
+    .hero-img-row { margin-top: 32px; display: flex; justify-content: center; }
+    .hero-img-row .hero-card { max-width: 100%; padding: 14px; }
+    .hero p { font-family: "Newsreader", serif; color: var(--muted); font-size: 19px; line-height: 1.6; margin: 0 0 16px; }
+    .hero-card { background: var(--glass); border: 1px solid var(--stroke); border-radius: 0; padding: 14px; backdrop-filter: blur(18px); box-shadow: var(--shadow); }
+    .hero-card img { width: 100%; border-radius: 0; display: block; box-shadow: inset 0 0 40px 20px rgba(255,255,255,0.8); }
+    .authors { margin-top: 20px; font-family: "Newsreader", serif; color: var(--muted); font-size: 18px; line-height: 1.5; text-align: center; }
+    .authors a { color: var(--muted); text-decoration: none; }
+    .authors a:hover { color: var(--accent); text-decoration: underline; }
+    .section { margin-top: 60px; }
+    .section h2 { font-size: 28px; font-family: "Newsreader", serif; margin: 0 0 8px; }
+    .glass { background: var(--glass); border: 1px solid var(--stroke); border-radius: 0; padding: 22px; backdrop-filter: blur(14px); box-shadow: var(--shadow); }
+    .pipeline-full { width: 100%; margin-bottom: 20px; }
+    .pipeline-full img { width: 100%; border-radius: 0; display: block; }
+    .pipeline-steps-new { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .step { display: flex; align-items: flex-start; gap: 14px; padding: 16px; background: var(--glass); border-radius: 0; border: 1px solid var(--stroke); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--shadow); }
+    .step-icon { width: 36px; height: 36px; border-radius: 0; background: #ffffff; border: 1.5px solid rgba(0, 99, 190, 0.35); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--accent); flex-shrink: 0; box-shadow: 0 2px 8px rgba(0, 99, 190, 0.12); }
+    .step h4 { margin: 0 0 4px; font-size: 18px; font-family: "Newsreader", serif; color: var(--text); }
+    .step p { margin: 0; font-size: 16px; font-family: "Newsreader", serif; color: var(--muted); line-height: 1.45; }
+    .step-note { font-size: 13px; color: var(--accent); margin-top: 4px; }
+    .problem-text { font-family: "Newsreader", serif; font-size: 18px; line-height: 1.65; color: var(--muted); margin: 0; }
+    .tasks-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+    .task-item { display: flex; align-items: center; justify-content: center; padding: 10px 14px; background: var(--glass); border-radius: 0; border: 1px solid var(--stroke); font-size: 17px; font-family: "Newsreader", serif; color: var(--text); text-align: center; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--shadow); min-height: 52px; }
+    .result-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 16px; margin: 20px 0; }
+    .result-card { background: var(--glass); border: 1px solid var(--stroke); border-radius: 0; padding: 18px; text-align: center; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--shadow); }
+    .result-num { font-size: 36px; font-weight: 700; background: linear-gradient(135deg, var(--accent), var(--accent-3)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .result-label { font-size: 14px; font-family: "Newsreader", serif; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .result-sub { font-size: 14px; font-family: "Newsreader", serif; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+    .highlight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .highlight-card { padding: 16px; border-radius: 0; background: linear-gradient(135deg, rgba(0, 99, 190, 0.08), rgba(124, 58, 237, 0.08)); border: 1px solid rgba(0, 99, 190, 0.15); }
+    .highlight-card h4 { margin: 0 0 8px; font-size: 16px; color: var(--text); }
+    .highlight-card p { margin: 0; font-size: 18px; font-family: "Newsreader", serif; color: var(--muted); line-height: 1.5; }
+    .examples-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+    .example-item { background: var(--glass); border-radius: 0; padding: 10px; border: 1px solid var(--stroke); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--shadow); transition: transform 0.25s ease, box-shadow 0.25s ease; cursor: pointer; }
+    .example-item:hover { transform: scale(1.2); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2); z-index: 10; position: relative; }
+    .example-item img { width: 100%; border-radius: 0; display: block; margin-bottom: 8px; }
+    .example-item .task-name { font-size: 14px; font-family: "Newsreader", serif; color: var(--text); font-weight: 700; text-align: center; }
+    .example-item .qa { font-size: 13px; font-family: "Newsreader", serif; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+    .example-item .qa-q { font-family: "Newsreader", serif; color: var(--text); font-weight: 500; display: block; font-size: 15px; }
+    .example-item .qa-a { font-family: "Newsreader", serif; color: var(--accent); display: block; margin-top: 3px; font-size: 15px; }
+    .citation-block { background: var(--glass); border: 1px solid var(--stroke); border-radius: 0; padding: 18px; margin-top: 20px; font-family: monospace; font-size: 14px; line-height: 1.6; color: var(--text); white-space: normal; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--shadow); }
+    .citation-block-inner { display: flex; gap: 12px; align-items: flex-start; }
+    .citation-block-inner .bibtex { flex: 1; }
+    .citation-block-inner .bibtex div { display: block; margin: 0; white-space: pre; }
+    .citation-block .copy-btn { width: 28px; height: 28px; padding: 0; flex-shrink: 0; font-size: 0; background: var(--glass); border: 1px solid var(--stroke); border-radius: 0; color: var(--text); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+    .citation-block .copy-btn:hover { background: rgba(255,255,255,0.25); }
+    .citation-block .copy-btn.copied { background: rgba(5, 150, 105, 0.3); border-color: var(--accent-3); }
+    @media (max-width: 860px) {
+      .pipeline-steps-new { grid-template-columns: 1fr; }
+      .examples-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    /* Scroll-driven section highlight */
+    .section { transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.5s ease; }
+    .section .glass {
+      transition: transform 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                  box-shadow 0.5s ease,
+                  border-color 0.5s ease,
+                  background 0.5s ease;
+    }
+    .section:not(.active) {
+      opacity: 0.6;
+      transform: translateY(20px);
+    }
+    .section.active .glass {
+      transform: scale(1.015);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25), 0 0 40px rgba(124, 58, 237, 0.15);
+      border-color: rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.2);
+    }
+    :root.dark .section.active .glass {
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 50px rgba(124, 58, 237, 0.25);
+      border-color: rgba(255, 255, 255, 0.25);
+      background: rgba(0, 0, 0, 0.5);
+    }
+    :root.dark .result-num {
+      background: linear-gradient(135deg, #60a5fa, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    :root.dark .highlight-card {
+      background: linear-gradient(135deg, rgba(124, 58, 237, 0.25), rgba(0, 99, 190, 0.25));
+      border-color: rgba(124, 58, 237, 0.3);
+    }
+    :root.dark .step-icon { background: rgba(255,255,255,0.12); border-color: rgba(100, 150, 220, 0.4); color: rgba(100, 150, 220, 0.9); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+
+    /* Abstract spotlight animation */
+    .spotlight-p { transition: opacity 0.8s ease, transform 0.8s ease; font-family: "Newsreader", serif; }
+    .spotlight-p.dimmed { opacity: 0.25; transform: translateX(-4px); }
+    .spotlight-p:not(.dimmed) { opacity: 1; transform: translateX(0); }
+
+    /* Theme toggle button */
+    .theme-toggle {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 100;
+      width: 44px;
+      height: 44px;
+      border-radius: 0;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.3s ease, border-color 0.3s ease, transform 0.3s ease;
+    }
+    .theme-toggle:hover {
+      background: rgba(255, 255, 255, 0.25);
+      transform: scale(1.08);
+    }
+    .theme-toggle svg {
+      width: 20px;
+      height: 20px;
+      fill: var(--text);
+      transition: fill 0.3s ease;
+    }
+    .theme-toggle .sun { display: none; }
+    .theme-toggle .moon { display: block; }
+    :root.dark .theme-toggle { background: rgba(0, 0, 0, 0.4); border-color: rgba(255, 255, 255, 0.2); }
+    :root.dark .theme-toggle svg { fill: rgba(255, 255, 255, 0.8); }
+    :root.dark .theme-toggle .sun { display: block; }
+    :root.dark .theme-toggle .moon { display: none; }
+  </style>
+</head>
+<body>
+
+<canvas id="glcanvas"></canvas>
+
+<!-- Theme Toggle -->
+<button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
+  <svg class="sun" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 17.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zm0-14.5v2m0 18v2m9.5-11h-2m-18 0h-2m2.5-6.5-1.4 1.4M4.9 19.1l-1.4 1.4m15.5 0-1.4-1.4M4.9 4.9 3.5 3.5m16.5 12h-2m-13-2h2m-1 4.6-1.4-1.4M4.9 19.1l1.4-1.4"/>
+  </svg>
+  <svg class="moon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+  </svg>
+</button>
+
+<script>
+// Vertex Shader - Full-screen quad
+const vsSource = `
+    attribute vec4 aVertexPosition;
+    void main() {
+        gl_Position = aVertexPosition;
+    }
+`;
+
+// Fragment Shader - Refined Holographic fluid
+const fsSource = `
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+    uniform float u_time;
+    uniform vec2 u_resolution;
+    uniform float u_theme;
+
+    vec4 permute(vec4 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
+    vec4 taylorInvSqrt(vec4 r) { return 1.79284291400159 - 0.85373472095314 * r; }
+
+    float snoise(vec3 v) {
+        const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+        const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+        vec3 i  = floor(v + dot(v, C.yyy));
+        vec3 x0 = v - i + dot(i, C.xxx);
+        vec3 g = step(x0.yzx, x0.xyz);
+        vec3 l = 1.0 - g;
+        vec3 i1 = min(g.xyz, l.zxy);
+        vec3 i2 = max(g.xyz, l.zxy);
+        vec3 x1 = x0 - i1 + C.xxx;
+        vec3 x2 = x0 - i2 + C.yyy;
+        vec3 x3 = x0 - D.yyy;
+        i = mod(i, 289.0);
+        vec4 p = permute(permute(permute(
+            i.z + vec4(0.0, i1.z, i2.z, 1.0))
+            + i.y + vec4(0.0, i1.y, i2.y, 1.0))
+            + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+        float n_ = 1.0/7.0;
+        vec3 ns = n_ * D.wyz - D.xzx;
+        vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+        vec4 x_ = floor(j * ns.z);
+        vec4 y_ = floor(j - 7.0 * x_);
+        vec4 x = x_ *ns.x + ns.yyyy;
+        vec4 y = y_ *ns.x + ns.yyyy;
+        vec4 h = 1.0 - abs(x) - abs(y);
+        vec4 b0 = vec4(x.xy, y.xy);
+        vec4 b1 = vec4(x.zw, y.zw);
+        vec4 s0 = floor(b0)*2.0 + 1.0;
+        vec4 s1 = floor(b1)*2.0 + 1.0;
+        vec4 sh = -step(h, vec4(0.0));
+        vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+        vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+        vec3 p0 = vec3(a0.xy, h.x);
+        vec3 p1 = vec3(a0.zw, h.y);
+        vec3 p2 = vec3(a1.xy, h.z);
+        vec3 p3 = vec3(a1.zw, h.w);
+        vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+        p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+        vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+        m = m * m;
+        return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+    }
+
+    float fbm(vec3 p, int octaves) {
+        float value = 0.0;
+        float amplitude = 0.5;
+        float frequency = 1.0;
+        for(int i = 0; i < 5; i++) {
+            if(i >= octaves) break;
+            value += amplitude * snoise(p * frequency);
+            frequency *= 2.0;
+            amplitude *= 0.5;
+        }
+        return value;
+    }
+
+    void main() {
+        vec2 p = (2.0 * gl_FragCoord.xy - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+        float t = u_time * 0.2;
+
+        vec3 q = vec3(
+            fbm(vec3(p * 0.8, t * 0.2), 3),
+            fbm(vec3(p * 0.8 + vec2(5.2, 1.3), t * 0.2), 3),
+            fbm(vec3(p * 0.8 + vec2(1.3, 5.2), t * 0.2), 3)
+        );
+
+        vec3 r = vec3(
+            fbm(vec3(p + q.xy * 1.5 + vec2(1.7, 9.2), t * 0.15), 3),
+            fbm(vec3(p + q.xy * 1.5 + vec2(8.3, 2.8), t * 0.15), 3),
+            fbm(vec3(p + q.xy * 1.5 + vec2(2.4, 7.1), t * 0.15), 3)
+        );
+
+        float n = fbm(vec3(p + r.xy * 1.0, t * 0.1), 4);
+
+        // Light mode: soft pastel palette
+        vec3 col_lavender = vec3(0.85, 0.82, 1.0);
+        vec3 col_cyan     = vec3(0.70, 0.95, 1.0);
+        vec3 col_rose     = vec3(1.0, 0.85, 0.92);
+        vec3 col_white    = vec3(1.0, 1.0, 1.0);
+
+        // Dark mode: vibrant neon palette
+        vec3 col_neon_pink   = vec3(1.0, 0.2, 0.6);
+        vec3 col_neon_cyan   = vec3(0.0, 0.9, 1.0);
+        vec3 col_neon_purple = vec3(0.55, 0.1, 0.95);
+        vec3 col_neon_orange = vec3(1.0, 0.5, 0.1);
+        vec3 col_dark_base   = vec3(0.0, 0.0, 0.0);
+
+        vec3 color;
+        if (u_theme < 0.5) {
+            // Light mode
+            color = mix(col_lavender, col_cyan, clamp(r.x * 1.2, 0.0, 1.0));
+            color = mix(color, col_rose, clamp(r.y * 1.0, 0.0, 1.0));
+            color = mix(color, col_white, clamp(n * 0.6, 0.0, 1.0));
+            color = pow(color, vec3(0.85));
+            color += 0.01;
+            float shine = smoothstep(0.2, 0.5, n);
+            color = mix(color, col_white, shine * 0.3);
+        } else {
+            // Dark mode: vibrant neon
+            float rxf = clamp(r.x * 1.2, -0.5, 1.0);
+            float ryf = clamp(r.y * 1.0, -0.5, 1.0);
+            color = mix(col_neon_purple, col_neon_pink, 0.5 + 0.5 * rxf);
+            color = mix(color, col_neon_cyan, 0.4 + 0.4 * ryf);
+            color = mix(color, col_neon_orange, 0.2 + 0.2 * n);
+            // Add glow highlight
+            float glow = smoothstep(0.3, 0.8, n);
+            color = mix(color, vec3(1.0), glow * 0.15);
+            // Subtle vignette to keep edges dark
+            float vig = 1.0 - length(p) * 0.3;
+            color *= max(vig, 0.0);
+        }
+
+        gl_FragColor = vec4(color, 1.0);
+    }
+`;
+
+function initWebGL() {
+    const canvas = document.getElementById('glcanvas');
+    const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+
+    if (!gl) {
+        document.body.style.background = 'linear-gradient(135deg, #e0c3fc, #8ec5fc)';
+        return null;
+    }
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function compileShader(type, source) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        return shader;
+    }
+
+    const vs = compileShader(gl.VERTEX_SHADER, vsSource);
+    const fs = compileShader(gl.FRAGMENT_SHADER, fsSource);
+    const program = gl.createProgram();
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    gl.useProgram(program);
+
+    const positions = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+    const posBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
+
+    const aPosition = gl.getAttribLocation(program, 'aVertexPosition');
+    gl.enableVertexAttribArray(aPosition);
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0);
+
+    const uTime = gl.getUniformLocation(program, 'u_time');
+    const uResolution = gl.getUniformLocation(program, 'u_resolution');
+    const uTheme = gl.getUniformLocation(program, 'u_theme');
+
+    let theme = 0.0; // 0 = light, 1 = dark
+
+    const startTime = Date.now();
+    let animId = null;
+    let lastFrameTime = 0;
+    const targetFPS = 30; // Reduce from 60 for better performance
+
+    function render(timestamp) {
+        // Throttle to target FPS
+        if (timestamp - lastFrameTime < (1000 / targetFPS)) {
+            animId = requestAnimationFrame(render);
+            return;
+        }
+        lastFrameTime = timestamp;
+
+        // Skip rendering if tab is hidden
+        if (document.hidden) {
+            animId = requestAnimationFrame(render);
+            return;
+        }
+
+        const time = (Date.now() - startTime) / 1000;
+        gl.uniform1f(uTime, time);
+        gl.uniform2f(uResolution, canvas.width, canvas.height);
+        gl.uniform1f(uTheme, theme);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        animId = requestAnimationFrame(render);
+    }
+    render();
+
+    // Theme toggle
+    const toggleBtn = document.getElementById('themeToggle');
+    toggleBtn.addEventListener('click', () => {
+        theme = theme < 0.5 ? 1.0 : 0.0;
+        document.documentElement.classList.toggle('dark', theme > 0.5);
+        // Pause animation in dark mode
+        if (theme > 0.5 && animId) {
+            cancelAnimationFrame(animId);
+            animId = null;
+        } else if (theme < 0.5 && !animId) {
+            render();
+        }
+    });
+}
+
+initWebGL();
+</script>
+
+<main class="container">
+
+    <!-- HERO -->
+    <section>
+      <div>
+        <h1 style="font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 48px; margin-bottom: 8px;">
+          VisionFoundry
+        </h1>
+        <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+
+        <p style="font-size: 26px; color: var(--text); margin-top: 0; margin-bottom: 16px; font-family: 'Space Grotesk', sans-serif;">
+          Teaching VLMs Visual Perception with Synthetic Images
+        </p>
+
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+        <div class="badge-row">
+          <!-- Project Page -->
+          <a class="badge" href="https://zlab-princeton.github.io/VisionFoundry" style="text-transform: none; font-family: 'Space Grotesk', sans-serif;">
+            <i class="fa-solid fa-globe"></i> Project Page
+          </a>
+
+          <!-- Paper -->
+          <a class="badge" href="https://arxiv.org/abs/2604.09531" style="text-transform: none; font-family: 'Space Grotesk', sans-serif;">
+            <i class="fa-solid fa-file-alt"></i> Paper
+          </a>
+
+          <!-- GitHub -->
+          <a class="badge" href="https://github.com/zlab-princeton/VisionFoundry" style="text-transform: none; font-family: 'Space Grotesk', sans-serif;">
+            <i class="fa-brands fa-github"></i> Code
+          </a>
+
+          <!-- Hugging Face -->
+          <a class="badge" href="https://huggingface.co/datasets/zlab-princeton/VisionFoundry-10K" style="text-transform: none; font-family: 'Space Grotesk', sans-serif;">
+            <img src="assets/images/hf.png"
+                alt="Hugging Face"
+                style="height:1em;vertical-align:middle;margin-right:6px;"> Dataset
+          </a>
+        </div>
+        <div class="glass" style="margin-top: 8px;">
+          <p class="spotlight-p" style="font-size: 17px; line-height: 1.7; color: var(--text); margin: 0 0 14px;">
+            Vision-language models (VLMs or MLLMs) still struggle with visual perception tasks such as spatial understanding and viewpoint reasoning. We hypothesize that this perception bottleneck stems from <strong>insufficient supervision in natural image datasets</strong> for visual perception skills.
+          </p>
+          <p class="spotlight-p dimmed" style="font-size: 17px; line-height: 1.7; color: var(--text); margin: 0 0 14px;">
+            We introduce <strong>VisionFoundry</strong>, a task-aware synthetic data generation pipeline that uses LLMs to generate questions, answers, and T2I prompts, then synthesizes images and verifies consistency with a VLM, <strong>requiring no reference images or human annotation</strong>. Using VisionFoundry, we construct <strong>VisionFoundry-10K</strong>, a 10k synthetic VQA dataset with 10 visual perception tasks.
+          </p>
+          <p class="spotlight-p dimmed" style="font-size: 17px; line-height: 1.7; color: var(--text); margin: 0;">
+            Models trained on <strong>VisionFoundry-10K</strong> achieve substantial improvements on visual perception benchmarks: +7% on MMVP and +10% on CV-Bench-3D, while preserving broader capabilities and showing favorable scaling behavior as data size increases.
+          </p>
+        </div>
+
+        <div class="authors">
+          <a href="https://the-martyr.github.io/">Guanyu Zhou</a><sup style="font-size:0.7em;">1</sup>, <a href="https://davidyyd.github.io/">Yida Yin</a><sup style="font-size:0.7em;">1</sup>, <a href="https://wenhaochai.com/">Wenhao Chai</a><sup style="font-size:0.7em;">1</sup>, <a href="https://tsb0601.github.io/">Shengbang Tong</a><sup style="font-size:0.7em;">2</sup>, <a href="https://zeyofu.github.io/">Xingyu Fu</a><sup style="font-size:0.7em;">1</sup>, <a href="https://liuzhuang13.github.io/">Zhuang Liu</a><sup style="font-size:0.7em;">1</sup>
+          <br />
+          <span style="color: rgba(90, 90, 122, 0.85); display: block; margin-top: 6px; font-size: 0.85em;"><sup style="font-size:0.7em;">1</sup>Princeton University &nbsp;&nbsp; <sup style="font-size:0.7em;">2</sup>New York University</span>
+        </div>
+      </div>
+      <div class="hero-img-row">
+        <div class="hero-card">
+          <img src="assets/images/visionfoundry_diagram.png" alt="VisionFoundry overview" />
+        </div>
+      </div>
+    </section>
+
+    <!-- THE PROBLEM -->
+    <section class="section">
+      <h2>Visual Perception: A Data Problem?</h2>
+      <div class="glass">
+        <p class="problem-text">
+          VLMs still struggle with visual perception tasks. We hypothesize that this perception bottleneck stems from <strong>insufficient supervision in natural image datasets</strong> for low-level visual skills. Natural image-text corpora may not systematically cover the full combinatorial space of spatial relations, viewpoint variations, and depth orderings.
+        </p>
+        <p class="problem-text" style="margin-top: 14px;">
+          Can we synthesize targeted supervision <strong>from scratch</strong> to address these weaknesses, <strong>without</strong> relying on reference images or expensive human annotation?
+        </p>
+      </div>
+    </section>
+
+    <!-- KEY RESULTS -->
+    <section class="section">
+      <h2>Main Results</h2>
+      <div class="glass">
+        <div class="result-cards">
+          <div class="result-card">
+            <div class="result-num">+7%</div>
+            <div class="result-label">MMVP</div>
+            <div class="result-sub">Visual Perception</div>
+          </div>
+          <div class="result-card">
+            <div class="result-num">+5%</div>
+            <div class="result-label">CV-Bench-2D</div>
+            <div class="result-sub">2D Spatial Reasoning</div>
+          </div>
+          <div class="result-card">
+            <div class="result-num">+10%</div>
+            <div class="result-label">CV-Bench-3D</div>
+            <div class="result-sub">3D Spatial Reasoning</div>
+          </div>
+          <div class="result-card">
+            <div class="result-num">10K</div>
+            <div class="result-label">Samples</div>
+            <div class="result-sub">1k per task, 10 tasks</div>
+          </div>
+        </div>
+        <p style="font-family: 'Newsreader', serif; color: var(--muted); font-size: 18px; margin: 0; line-height: 1.5;">
+          Finetuning on VisionFoundry-10K consistently improves visual perception benchmarks across three VLMs, while general-purpose benchmarks show benchmark-dependent changes.
+        </p>
+      </div>
+    </section>
+
+    <!-- PIPELINE -->
+    <section class="section">
+      <h2>VisionFoundry Pipeline</h2>
+      <div class="glass">
+        <div class="pipeline-full">
+          <img src="assets/images/banana_pipeline_recreation.png" alt="VisionFoundry pipeline overview" />
+        </div>
+        <div class="pipeline-steps-new">
+          <div class="step">
+            <div class="step-icon">1</div>
+            <div>
+              <h4>Text Generation</h4>
+              <p>GPT-5.2 generates task-aware Q&amp;A pairs and detailed T2I prompts from an entity pool.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-icon">2</div>
+            <div>
+              <h4>Image Synthesis</h4>
+              <p>Gemini-2.5-Flash-Image (Nano Banana) synthesizes images conditioned on T2I prompts.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-icon">3</div>
+            <div>
+              <h4>Verification &amp; Filtering</h4>
+              <p>Gemini-3-Pro verifies alignment between image and answer-determining visual statement.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TASKS -->
+    <section class="section">
+      <h2>VisionFoundry-10K</h2>
+      <div class="glass">
+        <p style="font-family: 'Newsreader', serif; color: var(--muted); font-size: 18px; margin: 0 0 16px; line-height: 1.5;">
+          Each task targets a distinct low-level visual perception skill identified as a persistent weakness in contemporary VLMs. Each produces 1,000 verified samples, yielding 10,000 QA pairs in total.
+        </p>
+        <div class="tasks-grid">
+          <div class="task-item">Orientation and Direction</div>
+          <div class="task-item">Viewpoint and Perspective</div>
+          <div class="task-item">Positional and Relational Context</div>
+          <div class="task-item">Spatial Relationship</div>
+          <div class="task-item">State and Condition</div>
+          <div class="task-item">Structural and Physical Characteristics</div>
+          <div class="task-item">Color and Appearance</div>
+          <div class="task-item">Depth Order</div>
+          <div class="task-item">Relative Distance</div>
+          <div class="task-item">Real-World Spatial Understanding</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EXAMPLES -->
+    <section class="section">
+      <h2>Dataset Examples</h2>
+      <div class="glass">
+        <div class="examples-grid">
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Orientation_and_Direction_100_100_200_25_1.png" alt="Orientation and Direction" />
+            <div class="task-name">Orientation and Direction</div>
+            <div class="qa"><span class="qa-q">Q: Is the motorcycle facing toward the camera or away from the camera?</span><span class="qa-a">A: Away from the camera.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Viewpoint_and_Perspective_100_50_200_25_15.png" alt="Viewpoint and Perspective" />
+            <div class="task-name">Viewpoint and Perspective</div>
+            <div class="qa"><span class="qa-q">Q: From what perspective was the photo taken relative to the screen?</span><span class="qa-a">A: From a very low, worm's-eye viewpoint near the front row.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Positional_and_Relational_Context_100_50_200_25.png" alt="Positional and Relational Context" />
+            <div class="task-name">Positional and Relational Context</div>
+            <div class="qa"><span class="qa-q">Q: Which object is directly above the suitcase?</span><span class="qa-a">A: The backpack.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Spatial_Relationship_200_50_200_25.png" alt="Spatial Relationship" />
+            <div class="task-name">Spatial Relationship</div>
+            <div class="qa"><span class="qa-q">Q: In the blueprint image, is the tripod located west of the sink?</span><span class="qa-a">A: Yes, the tripod is west (left) of the sink.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_State_and_Condition_200_100_100_25_1.png" alt="State and Condition" />
+            <div class="task-name">State and Condition</div>
+            <div class="qa"><span class="qa-q">Q: Is the toy ship's cabin door closed or ajar?</span><span class="qa-a">A: Ajar.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Structural_and_Physical_Characteristics_200_100_100_25_11.png" alt="Structural and Physical Characteristics" />
+            <div class="task-name">Structural and Physical Characteristics</div>
+            <div class="qa"><span class="qa-q">Q: What is the silhouette profile of the barometer in the image?</span><span class="qa-a">A: Circular with a small hanging loop at the top.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Color_and_Appearance_200_100_100_25_2.png" alt="Color and Appearance" />
+            <div class="task-name">Color and Appearance</div>
+            <div class="qa"><span class="qa-q">Q: What two colors are the stripes on the sofa?</span><span class="qa-a">A: Red and white.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Depth_Order_200_50_200_25_15.png" alt="Depth Order" />
+            <div class="task-name">Depth Order</div>
+            <div class="qa"><span class="qa-q">Q: Which object is closer to the camera, the submarine or the knife?</span><span class="qa-a">A: The submarine is closer to the camera.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Relative_Distance_300_50_100_25_2.png" alt="Relative Distance" />
+            <div class="task-name">Relative Distance</div>
+            <div class="qa"><span class="qa-q">Q: Which object is closest to the pallet stack with the barcode label?</span><span class="qa-a">A: Cup.</span></div>
+          </div>
+          <div class="example-item">
+            <img src="assets/images/god_engine_v4_1000_Real_World_Spatial_Understanding_100_50_100_1_9.png" alt="Real World Spatial Understanding" />
+            <div class="task-name">Real-World Spatial Understanding</div>
+            <div class="qa"><span class="qa-q">Q: Is the window's bottom sill higher than the mailbox?</span><span class="qa-a">A: Yes, the window sill is higher than the top of the mailbox.</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Experiment Analysis: Data Scaling -->
+      <section class="section">
+        <div class="glass">
+          <h3 style="font-size: 20px; font-family: 'Newsreader', serif; margin: 0 0 14px; color: var(--text);">Data-Size Effects of Synthetic Supervision</h3>
+          <img src="assets/images/scaling5.png" alt="Data-Size Effects of Synthetic Supervision" style="width: 100%; border-radius: 0;" />
+          <p style="font-family: 'Newsreader', serif; color: var(--muted); font-size: 18px; margin: 14px 0 0; line-height: 1.6;">
+            Performance improves predictably with more synthetic data. Results show an <strong>upward trend on visual perception benchmarks</strong> as data size increases, demonstrating that VisionFoundry-10K provides reliable, high-quality supervision without saturation.
+          </p>
+        </div>
+      </section>
+
+      <!-- Experiment Analysis: Mixture vs Natural -->
+      <section class="section">
+        <div class="glass">
+          <h3 style="font-size: 20px; font-family: 'Newsreader', serif; margin: 0 0 14px; color: var(--text);">Equal-Sized Mixture vs. Pure Natural Data</h3>
+          <img src="assets/images/mix_vs_natural.png" alt="Equal-sized mixture vs pure natural data" style="width: 100%; border-radius: 0;" />
+          <p style="font-family: 'Newsreader', serif; color: var(--muted); font-size: 18px; margin: 14px 0 0; line-height: 1.6;">
+            Equal-sized synthetic-natural mixture <strong>outperforms pure natural data</strong> on visual perception benchmarks while maintaining comparable general-purpose performance. This confirms that <strong>verifier-filtered synthetic images provide complementary signals</strong> that are hard to obtain from natural data alone.
+          </p>
+        </div>
+      </section>
+
+      <!-- Experiment Analysis: Epoch Trade-off -->
+      <section class="section">
+        <div class="glass">
+          <h3 style="font-size: 20px; font-family: 'Newsreader', serif; margin: 0 0 14px; color: var(--text);">Epoch Trade-off</h3>
+          <img src="assets/images/epoch6.png" alt="Training epoch effects" style="width: 100%; border-radius: 0;" />
+          <p style="font-family: 'Newsreader', serif; color: var(--muted); font-size: 18px; margin: 14px 0 0; line-height: 1.6;">
+            With a single-task 1k subset, performance converges after ~8 epochs. With the full 10-task set, convergence is reached sooner. <strong>Larger and more diverse datasets enable more efficient training</strong>.
+          </p>
+        </div>
+      </section>
+    </section>
+
+    <!-- HIGHLIGHTS -->
+    <section class="section">
+      <h2>Key Findings</h2>
+      <div class="highlight-grid" style="grid-template-columns: 1fr;">
+        <div class="highlight-card">
+          <p>The visual perception bottleneck in VLMs is, to a large extent, a data problem.</p>
+        </div>
+        <div class="highlight-card">
+          <p>On small-scale datasets, synthetic images can demonstrate preliminary task-aware scaling behavior.</p>
+        </div>
+        <div class="highlight-card">
+          <p>The performance of synthetic images and synthetic QA pairs can surpass that of natural VQA data constructed using traditional methods.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CITATION -->
+    <section class="section">
+      <h2>Citation</h2>
+      <div class="citation-block" id="citationBlock">
+        <div class="citation-block-inner">
+          <div class="bibtex" id="bibtexContent" data-bibtex="@article{zhou2025visionfoundry,
+    title={VisionFoundry: Teaching VLMs Visual Perception with Synthetic Images},
+    author={Guanyu Zhou and Yida Yin and Wenhao Chai and Shengbang Tong and Xingyu Fu and Zhuang Liu},
+    journal={arXiv preprint arXiv:XXXX.XXXX},
+    year={2025}
+}"><div>@article{zhou2025visionfoundry,</div><div>  title={VisionFoundry: Teaching VLMs Visual Perception with Synthetic Images},</div><div>  author={Guanyu Zhou and Yida Yin and Wenhao Chai and Shengbang Tong and Xingyu Fu and Zhuang Liu},</div><div>  journal={arXiv preprint arXiv:XXXX.XXXX},</div><div>  year={2025}</div><div>}</div></div><button class="copy-btn" onclick="copyBibtex()" aria-label="Copy BibTeX"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="0" ry="0"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+<script>
+// Intersection Observer for scroll-driven section highlighting
+const observerOptions = {
+  root: null,
+  rootMargin: '-15% 0px -15% 0px',
+  threshold: 0.1
+};
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('active');
+    } else {
+      entry.target.classList.remove('active');
+    }
+  });
+}, observerOptions);
+
+document.querySelectorAll('.section').forEach(section => {
+  observer.observe(section);
+});
+
+// Abstract spotlight cycling
+const spotlightParagraphs = document.querySelectorAll('.spotlight-p');
+let currentSpotlight = 0;
+let spotlightInterval = null;
+
+function cycleSpotlight() {
+  spotlightParagraphs.forEach((p, i) => {
+    p.classList.toggle('dimmed', i !== currentSpotlight);
+  });
+  currentSpotlight = (currentSpotlight + 1) % spotlightParagraphs.length;
+}
+
+function startSpotlight() {
+  if (!spotlightInterval) {
+    spotlightInterval = setInterval(cycleSpotlight, 3000);
+  }
+}
+
+function stopSpotlight() {
+  if (spotlightInterval) {
+    clearInterval(spotlightInterval);
+    spotlightInterval = null;
+  }
+  spotlightParagraphs.forEach(p => p.classList.remove('dimmed'));
+}
+
+// Start spotlight initially (light mode)
+startSpotlight();
+
+// Listen for theme changes to pause/resume spotlight
+const themeObserver = new MutationObserver((mutations) => {
+  mutations.forEach((mutation) => {
+    if (mutation.attributeName === 'class') {
+      const isDark = document.documentElement.classList.contains('dark');
+      if (isDark) {
+        stopSpotlight();
+      } else {
+        startSpotlight();
+      }
+    }
+  });
+});
+themeObserver.observe(document.documentElement, { attributes: true });
+
+// Copy BibTeX
+function copyBibtex() {
+  const el = document.getElementById('bibtexContent');
+  const cleaned = el.getAttribute('data-bibtex');
+  navigator.clipboard.writeText(cleaned).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.classList.add('copied');
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="0" ry="0"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+    }, 2000);
+  });
+}
+</script>
+</body>
+</html>
