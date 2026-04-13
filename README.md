@@ -78,7 +78,7 @@ python data_engine/vision_foundry.py \
   --api_config data_engine/config.example.json
 ```
 
-Example (multi-image mode):
+Example (multi-image mode, beta):
 
 ```bash
 python data_engine/vision_foundry.py \
