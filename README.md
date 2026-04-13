@@ -211,6 +211,8 @@ python run.py --data <BENCH1> <BENCH2> --model <MODEL_NAME> --verbose
 
 For distributed inference, use `torchrun --nproc-per-node=<N> run.py ...`. See the [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) quickstart for more details.
 
+When evaluating with **MiMo-VL-7B-SFT**, please append `/no_think` to the prompt to disable chain-of-thought reasoning for a fair comparison. See the official repo for details: [XiaomiMiMo/MiMo-VL](https://github.com/XiaomiMiMo/MiMo-VL?tab=readme-ov-file#thinking-control).
+
 ## License
 
 This project is released under the Apache-2.0 license. See `LICENSE` for details.
