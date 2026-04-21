@@ -222,11 +222,11 @@ This project is released under the Apache-2.0 license. See `LICENSE` for details
 If you use this work, please cite:
 
 ```bibtex
-@article{zhou2025visionfoundry,
+@article{zhou2026visionfoundry,
   title={VisionFoundry: Teaching VLMs Visual Perception with Synthetic Images},
-  author={Guanyu Zhou and Yida Yin and Wenhao Chai and Shengbang Tong and Xingyu Fu and Zhuang Liu},
+  author={Zhou, Guanyu and Yin, Yida and Chai, Wenhao and Tong, Shengbang and Fu, Xingyu and Liu, Zhuang},
   journal={arXiv preprint arXiv:2604.09531},
-  year={2025}
+  year={2026}
 }
 ```
 
