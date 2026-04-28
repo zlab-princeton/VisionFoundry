@@ -6,7 +6,7 @@
 
 ![Overview](images/visionfoundry_diagram-1.png)
 
-[![Project Page](https://img.shields.io/badge/Project-Page-blue.svg)](https://zlab-princeton.github.io/VisionFoundry) [![Paper](https://img.shields.io/badge/Paper-PDF-red.svg)](https://arxiv.org/abs/2604.09531) [![Code](https://img.shields.io/badge/Code-GitHub-blue.svg)](https://github.com/zlab-princeton/VisionFoundry) [![Dataset](https://img.shields.io/badge/Dataset-HuggingFace-yellow.svg)](https://huggingface.co/datasets/zlab-princeton/VisionFoundry-10K) [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
+[![Project Page](https://img.shields.io/badge/Project-Page-blue.svg)](https://zlab-princeton.github.io/VisionFoundry) [![Paper](https://img.shields.io/badge/Paper-PDF-red.svg)](https://arxiv.org/abs/2604.09531) [![License](https://img.shields.io/badge/License-Apache%202.0-green.svg)](LICENSE)
 
 <p style="font-size: 18px;">Use VisionFoundry to generate your own Synthetic Images Dataset with just one <strong>keyword</strong>!</p>
 
