@@ -15,13 +15,13 @@
 <details>
 <summary><strong>Training</strong></summary>
 
-We use the [ms-swift](https://github.com/modelscope/ms-swift) framework for SFT training. Please follow the official installation guidance and ensure your environment matches the recommended versions. The simplest install is:
+We use [ms-swift](https://github.com/modelscope/ms-swift) for SFT and [verl](https://github.com/verl-project/verl) for GRPO training. Please follow each framework's installation guidance. The simplest SFT install is:
 
 ```bash
 pip install ms-swift -U
 ```
 
-If you need a source install, you can clone the repo and run `pip install -e .` as documented. Refer to the official [ms-swift](https://github.com/modelscope/ms-swift) README for full requirements and options.
+If you need a source install, clone ms-swift and run `pip install -e .` as documented. The released RL recipes and their tested environment are described in [`rl/README.md`](rl/README.md).
 
 </details>
 
@@ -138,7 +138,11 @@ The pipeline produces:
 
 ## Training
 
-We provide three training scripts under `train_scripts/`:
+We provide both supervised fine-tuning and reinforcement-learning recipes.
+
+### Supervised Fine-Tuning
+
+The three ms-swift scripts under `train_scripts/` are:
 
 - `train_scripts/train_qwen.sh` (for [Qwen2.5-VL-3B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct))
 - `train_scripts/train_mimo.sh` (for [MiMo-VL-7B-SFT](https://huggingface.co/XiaomiMiMo/MiMo-VL-7B-SFT))
@@ -197,6 +201,17 @@ To launch training, fill in the placeholders in one of the scripts and run:
 bash train_scripts/train_qwen.sh
 ```
 
+### Reinforcement Learning
+
+The `rl/` directory provides full-parameter GRPO recipes for the same three backbones:
+
+- `rl/prepare_data.py`: converts the SFT annotations to verl parquet
+- `rl/text_judge_reward.py`: binary semantic reward from an OpenAI-compatible Qwen2.5-3B judge
+- `rl/batch_text_judge_reward.py`: concurrent verl batch-reward adapter
+- `rl/train_qwen.sh`, `rl/train_mimo.sh`, and `rl/train_llama.sh`: portable 8-GPU recipes
+
+The reward judge receives only the question, reference answer, and sampled model answer. It is configured entirely through environment variables; no API credentials or machine-specific paths are stored in this repository. See [`rl/README.md`](rl/README.md) for data conversion, environment setup, released hyperparameters, resume behavior, and checkpoint conversion.
+
 ## Evaluation
 
 We do not include custom evaluation code in this repo. Use [VLMEvalKit](https://github.com/open-compass/VLMEvalKit)'s built-in benchmark support:
@@ -235,4 +250,5 @@ If you use this work, please cite:
 This project builds on several strong open-source foundations:
 
 - [ms-swift](https://github.com/modelscope/ms-swift) for SFT training infrastructure
+- [verl](https://github.com/verl-project/verl) for GRPO training infrastructure
 - [VLMEvalKit](https://github.com/open-compass/VLMEvalKit) for multimodal evaluation

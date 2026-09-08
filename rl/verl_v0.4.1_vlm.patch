@@ -1,0 +1,316 @@
+diff --git a/verl/model_merger/base_model_merger.py b/verl/model_merger/base_model_merger.py
+index 6f866212..e44d6b36 100644
+--- a/verl/model_merger/base_model_merger.py
++++ b/verl/model_merger/base_model_merger.py
+@@ -24,9 +24,12 @@ from transformers import (
+     AutoConfig,
+     AutoModelForCausalLM,
+     AutoModelForTokenClassification,
+-    AutoModelForVision2Seq,
+     GenerationConfig,
+ )
++try:
++    from transformers import AutoModelForVision2Seq
++except ImportError:
++    from transformers import AutoModelForImageTextToText as AutoModelForVision2Seq
+ 
+ from verl.utils import hf_processor, hf_tokenizer
+ 
+diff --git a/verl/trainer/config/ppo_trainer.yaml b/verl/trainer/config/ppo_trainer.yaml
+index d2b39f9b..41b4dc47 100644
+--- a/verl/trainer/config/ppo_trainer.yaml
++++ b/verl/trainer/config/ppo_trainer.yaml
+@@ -253,6 +253,15 @@ actor_rollout_ref:
+       # Learning rate
+       lr: 1e-6
+ 
++      # Optional VL parameter groups. Disabled by default, so the optimizer is
++      # identical to the single-lr path unless this is explicitly enabled.
++      enable_vl_lr_groups: false
++      visual_lr: ${actor_rollout_ref.actor.optim.lr}
++      adapter_lr: ${actor_rollout_ref.actor.optim.lr}
++      llm_lr: ${actor_rollout_ref.actor.optim.lr}
++      visual_lr_keywords: ["visual"]
++      adapter_lr_keywords: ["visual.merger", "merger", "projector", "multi_modal_projector", "mm_projector"]
++
+       # Warmup steps; negative value delegates to lr_warmup_steps_ratio
+       lr_warmup_steps: -1
+ 
+diff --git a/verl/trainer/main_ppo.py b/verl/trainer/main_ppo.py
+index 8fda4105..e53477a3 100644
+--- a/verl/trainer/main_ppo.py
++++ b/verl/trainer/main_ppo.py
+@@ -39,10 +39,16 @@ def run_ppo(config) -> None:
+         # Set environment variables in the runtime environment to control tokenizer parallelism,
+         # NCCL debug level, VLLM logging level, and allow runtime LoRA updating
+         # `num_cpus` specifies the number of CPU cores Ray can use, obtained from the configuration
+-        ray.init(
+-            runtime_env={"env_vars": {"TOKENIZERS_PARALLELISM": "true", "NCCL_DEBUG": "WARN", "VLLM_LOGGING_LEVEL": "WARN", "VLLM_ALLOW_RUNTIME_LORA_UPDATING": "true"}},
+-            num_cpus=config.ray_init.num_cpus,
+-        )
++        ray_env = {
++            "TOKENIZERS_PARALLELISM": "true",
++            "NCCL_DEBUG": "WARN",
++            "VLLM_LOGGING_LEVEL": "WARN",
++            "VLLM_ALLOW_RUNTIME_LORA_UPDATING": "true",
++        }
++        for key in ("VERL_TORCH_DIST_TIMEOUT_SEC", "TORCH_NCCL_BLOCKING_WAIT", "TORCH_NCCL_ASYNC_ERROR_HANDLING"):
++            if key in os.environ:
++                ray_env[key] = os.environ[key]
++        ray.init(runtime_env={"env_vars": ray_env}, num_cpus=config.ray_init.num_cpus)
+ 
+     # Create a remote instance of the TaskRunner class, and
+     # Execute the `run` method of the TaskRunner instance remotely and wait for it to complete
+diff --git a/verl/utils/checkpoint/fsdp_checkpoint_manager.py b/verl/utils/checkpoint/fsdp_checkpoint_manager.py
+index c183fe6c..47dc0f8d 100644
+--- a/verl/utils/checkpoint/fsdp_checkpoint_manager.py
++++ b/verl/utils/checkpoint/fsdp_checkpoint_manager.py
+@@ -278,7 +278,10 @@ class FSDPCheckpointManager(BaseCheckpointManager):
+ 
+                     auto_model_cls = AutoModelForCausalLM
+                 elif "ForConditionalGeneration" in model_config.architectures[0]:
+-                    from transformers import AutoModelForVision2Seq
++                    try:
++                        from transformers import AutoModelForVision2Seq
++                    except ImportError:
++                        from transformers import AutoModelForImageTextToText as AutoModelForVision2Seq
+ 
+                     auto_model_cls = AutoModelForVision2Seq
+                 else:
+diff --git a/verl/utils/dataset/rl_dataset.py b/verl/utils/dataset/rl_dataset.py
+index 568b1403..871c4c33 100644
+--- a/verl/utils/dataset/rl_dataset.py
++++ b/verl/utils/dataset/rl_dataset.py
+@@ -153,10 +153,11 @@ class RLHFDataset(Dataset):
+                 from verl.utils.dataset.vision_utils import process_image, process_video
+ 
+                 def doc2len(doc) -> int:
++                    doc = copy.deepcopy(doc)
+                     messages = self._build_messages(doc)
+                     raw_prompt = self.processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+-                    images = [process_image(image) for image in messages.pop(image_key)] if image_key in messages else None
+-                    videos = [process_video(video) for video in messages.pop(video_key)] if video_key in messages else None
++                    images = [process_image(image) for image in doc.pop(image_key)] if image_key in doc else None
++                    videos = [process_video(video) for video in doc.pop(video_key)] if video_key in doc else None
+ 
+                     return len(processor(text=[raw_prompt], images=images, videos=videos)["input_ids"][0])
+ 
+diff --git a/verl/utils/model.py b/verl/utils/model.py
+index 89415496..60b036e8 100644
+--- a/verl/utils/model.py
++++ b/verl/utils/model.py
+@@ -501,7 +501,11 @@ def patch_valuehead_model(model) -> None:
+ 
+ 
+ def load_valuehead_model(local_path, torch_dtype, model_config, trust_remote_code):
+-    from transformers import AutoModelForCausalLM, AutoModelForTokenClassification, AutoModelForVision2Seq
++    from transformers import AutoModelForCausalLM, AutoModelForTokenClassification
++    try:
++        from transformers import AutoModelForVision2Seq
++    except ImportError:
++        from transformers import AutoModelForImageTextToText as AutoModelForVision2Seq
+ 
+     try:
+         model = AutoModelForTokenClassification.from_pretrained(
+diff --git a/verl/workers/actor/dp_actor.py b/verl/workers/actor/dp_actor.py
+index e2b887fd..b356ac8b 100644
+--- a/verl/workers/actor/dp_actor.py
++++ b/verl/workers/actor/dp_actor.py
+@@ -94,6 +94,18 @@ class DataParallelPPOActor(BasePPOActor):
+                 if (key == "pixel_values" and isinstance(micro_batch["multi_modal_inputs"][0]["pixel_values"], list)) or key == "image_bound" or key == "tgt_sizes":
+                     # For MiniCPM-o: keep as list structure instead of concatenating tensors
+                     multi_modal_inputs[key] = [inputs[key] for inputs in micro_batch["multi_modal_inputs"]]
++                elif key == "cross_attention_mask":
++                    tensors = [inputs[key] for inputs in micro_batch["multi_modal_inputs"]]
++                    max_seqlen = max(tensor.size(1) for tensor in tensors)
++                    padded_tensors = []
++                    for tensor in tensors:
++                        if tensor.size(1) < max_seqlen:
++                            pad_shape = list(tensor.shape)
++                            pad_shape[1] = max_seqlen - tensor.size(1)
++                            pad_value = tensor[:, -1:, ...].expand(pad_shape)
++                            tensor = torch.cat([tensor, pad_value], dim=1)
++                        padded_tensors.append(tensor)
++                    multi_modal_inputs[key] = torch.cat(padded_tensors, dim=0)
+                 else:
+                     multi_modal_inputs[key] = torch.cat([inputs[key] for inputs in micro_batch["multi_modal_inputs"]], dim=0)
+ 
+@@ -245,6 +257,18 @@ class DataParallelPPOActor(BasePPOActor):
+                     extra_args["temperature"] = temperature
+                     extra_args["return_dict"] = True
+ 
++                cross_attention_mask = multi_modal_inputs.get("cross_attention_mask")
++                if cross_attention_mask is not None and cross_attention_mask.size(1) != seqlen:
++                    mask_seqlen = cross_attention_mask.size(1)
++                    if mask_seqlen < seqlen:
++                        pad_len = seqlen - mask_seqlen
++                        pad_shape = list(cross_attention_mask.shape)
++                        pad_shape[1] = pad_len
++                        pad_value = cross_attention_mask[:, -1:, ...].expand(pad_shape)
++                        multi_modal_inputs["cross_attention_mask"] = torch.cat([cross_attention_mask, pad_value], dim=1)
++                    else:
++                        multi_modal_inputs["cross_attention_mask"] = cross_attention_mask[:, :seqlen, ...]
++
+                 output = self.actor_module(
+                     input_ids=input_ids,
+                     attention_mask=attention_mask,
+diff --git a/verl/workers/fsdp_workers.py b/verl/workers/fsdp_workers.py
+index 559f3773..bd943e9f 100644
+--- a/verl/workers/fsdp_workers.py
++++ b/verl/workers/fsdp_workers.py
+@@ -19,6 +19,7 @@ import json
+ import logging
+ import os
+ import warnings
++import datetime
+ from dataclasses import asdict
+ from typing import Optional, Union
+ 
+@@ -72,6 +73,10 @@ logger.setLevel(os.getenv("VERL_LOGGING_LEVEL", "WARN"))
+ device_name = get_device_name()
+ 
+ 
++def _dist_timeout():
++    return datetime.timedelta(seconds=int(os.environ.get("VERL_TORCH_DIST_TIMEOUT_SEC", "1800")))
++
++
+ def create_device_mesh(world_size, fsdp_size):
+     if fsdp_size < 0 or fsdp_size >= world_size:
+         device_mesh = init_device_mesh(device_name, mesh_shape=(world_size,), mesh_dim_names=["fsdp"])
+@@ -107,7 +112,13 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
+         if not torch.distributed.is_initialized():
+             rank = int(os.environ.get("RANK", 0))
+             world_size = int(os.environ.get("WORLD_SIZE", 1))
+-            torch.distributed.init_process_group(backend=f"cpu:gloo,{get_device_name()}:{get_nccl_backend()}", rank=rank, world_size=world_size, init_method=os.environ.get("DIST_INIT_METHOD", None))
++            torch.distributed.init_process_group(
++                backend=f"cpu:gloo,{get_device_name()}:{get_nccl_backend()}",
++                rank=rank,
++                world_size=world_size,
++                init_method=os.environ.get("DIST_INIT_METHOD", None),
++                timeout=_dist_timeout(),
++            )
+ 
+         # build device mesh for FSDP
+         world_size = torch.distributed.get_world_size()
+@@ -190,7 +201,11 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
+     ):
+         from torch import optim
+         from torch.distributed.fsdp import CPUOffload, MixedPrecision
+-        from transformers import AutoConfig, AutoModelForCausalLM, AutoModelForVision2Seq
++        from transformers import AutoConfig, AutoModelForCausalLM
++        try:
++            from transformers import AutoModelForVision2Seq
++        except ImportError:
++            from transformers import AutoModelForImageTextToText as AutoModelForVision2Seq
+ 
+         from verl.utils.model import get_generation_config, print_model_size, update_model_config
+         from verl.utils.torch_dtypes import PrecisionType
+@@ -218,7 +233,12 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
+             torch_dtype = PrecisionType.to_dtype(torch_dtype)
+ 
+         # override model kwargs
+-        actor_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code, attn_implementation="flash_attention_2")
++        attn_implementation = self.config.model.get("attn_implementation", "flash_attention_2")
++        actor_model_config = AutoConfig.from_pretrained(
++            local_path,
++            trust_remote_code=trust_remote_code,
++            attn_implementation=attn_implementation,
++        )
+ 
+         # patch for kimi-vl
+         if getattr(actor_model_config, "model_type", None) == "kimi_vl":
+@@ -364,12 +384,68 @@ class ActorRolloutRefWorker(Worker, DistProfilerExtension):
+         if role == "actor" and optim_config is not None:
+             from verl.utils.torch_functional import get_constant_schedule_with_warmup, get_cosine_schedule_with_warmup
+ 
+-            actor_optimizer = optim.AdamW(
+-                actor_module_fsdp.parameters(),
+-                lr=optim_config.lr,
+-                betas=optim_config.get("betas", (0.9, 0.999)),
+-                weight_decay=optim_config.get("weight_decay", 1e-2),
+-            )
++            if optim_config.get("enable_vl_lr_groups", False):
++                base_lr = optim_config.lr
++                visual_lr = optim_config.get("visual_lr", base_lr)
++                adapter_lr = optim_config.get("adapter_lr", base_lr)
++                llm_lr = optim_config.get("llm_lr", base_lr)
++                visual_keywords = tuple(optim_config.get("visual_lr_keywords", ["visual"]))
++                adapter_keywords = tuple(
++                    optim_config.get(
++                        "adapter_lr_keywords",
++                        ["visual.merger", "merger", "projector", "multi_modal_projector", "mm_projector"],
++                    )
++                )
++
++                grouped_params = {
++                    "visual": {"params": [], "lr": visual_lr},
++                    "adapter": {"params": [], "lr": adapter_lr},
++                    "llm": {"params": [], "lr": llm_lr},
++                }
++                grouped_param_names = {"visual": [], "adapter": [], "llm": []}
++
++                for param_name, param in actor_module_fsdp.named_parameters():
++                    if not param.requires_grad:
++                        continue
++                    if any(keyword in param_name for keyword in adapter_keywords):
++                        group_name = "adapter"
++                    elif any(keyword in param_name for keyword in visual_keywords):
++                        group_name = "visual"
++                    else:
++                        group_name = "llm"
++                    grouped_params[group_name]["params"].append(param)
++                    grouped_param_names[group_name].append(param_name)
++
++                missing_groups = [group_name for group_name in ("visual", "llm") if not grouped_params[group_name]["params"]]
++                if missing_groups:
++                    raise RuntimeError(
++                        "VL LR parameter grouping failed; empty groups: "
++                        f"{missing_groups}. Check FSDP parameter names and *_lr_keywords."
++                    )
++
++                if self.rank == 0:
++                    group_summary = {group_name: len(names) for group_name, names in grouped_param_names.items()}
++                    print(
++                        "Using VL LR groups: "
++                        f"visual_lr={visual_lr}, adapter_lr={adapter_lr}, llm_lr={llm_lr}, "
++                        f"group_param_counts={group_summary}"
++                    )
++                    for group_name, names in grouped_param_names.items():
++                        print(f"VL LR group {group_name} sample params: {names[:5]}")
++
++                actor_optimizer = optim.AdamW(
++                    [group for group in grouped_params.values() if group["params"]],
++                    lr=base_lr,
++                    betas=optim_config.get("betas", (0.9, 0.999)),
++                    weight_decay=optim_config.get("weight_decay", 1e-2),
++                )
++            else:
++                actor_optimizer = optim.AdamW(
++                    actor_module_fsdp.parameters(),
++                    lr=optim_config.lr,
++                    betas=optim_config.get("betas", (0.9, 0.999)),
++                    weight_decay=optim_config.get("weight_decay", 1e-2),
++                )
+ 
+             total_steps = optim_config.get("total_training_steps", 0)
+             num_warmup_steps = int(optim_config.get("lr_warmup_steps", -1))
+@@ -833,7 +909,7 @@ class CriticWorker(Worker, DistProfilerExtension):
+         import torch.distributed
+ 
+         if not torch.distributed.is_initialized():
+-            torch.distributed.init_process_group(backend=get_nccl_backend(), init_method=os.environ.get("DIST_INIT_METHOD", None))
++            torch.distributed.init_process_group(backend=get_nccl_backend(), init_method=os.environ.get("DIST_INIT_METHOD", None), timeout=_dist_timeout())
+         self.config = config
+ 
+         # build device mesh for Ulysses Sequence Parallel
+@@ -1182,7 +1258,7 @@ class RewardModelWorker(Worker, DistProfilerExtension):
+         import torch.distributed
+ 
+         if not torch.distributed.is_initialized():
+-            torch.distributed.init_process_group(backend=get_nccl_backend(), init_method=os.environ.get("DIST_INIT_METHOD", None))
++            torch.distributed.init_process_group(backend=get_nccl_backend(), init_method=os.environ.get("DIST_INIT_METHOD", None), timeout=_dist_timeout())
+         self.config = config
+ 
+         # build device mesh for Ulysses Sequence Parallel
+
+
